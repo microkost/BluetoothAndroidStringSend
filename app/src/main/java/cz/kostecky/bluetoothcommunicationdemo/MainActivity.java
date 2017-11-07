@@ -1,3 +1,5 @@
+//DEMO http://www.doepiccoding.com/blog/?p=232
+
 package cz.kostecky.bluetoothcommunicationdemo;
 
 import android.app.Activity;
@@ -5,7 +7,10 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -21,6 +26,7 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
@@ -29,22 +35,33 @@ import static android.content.ContentValues.TAG;
 
 public class MainActivity extends Activity
 {
-    private BluetoothAdapter mBluetoothAdapter;
-    private Set<BluetoothDevice> pairedDevices;
+    private boolean CONTINUE_READ_WRITE = true;
 
-    private BluetoothSocket mmSocket;
-    //private BluetoothServerSocket mmServerSocket;
-    private BluetoothDevice mmDevice;
-    OutputStream mmOutputStream; //used?
-    InputStream mmInputStream; //used?
-
-    private static String NAME = "cz.kostecky.bluetoothcommunicationdemo"; //id of app
-    private static UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fc"); //SerialPortService ID
+    //private static String NAME = "cz.kostecky.bluetoothcommunicationdemo"; //id of app
+    //private static UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"); //SerialPortService ID
 
     Button b1,b2,b3,b4;
     EditText et;
     ListView lv;
     CheckBox cbServer;
+
+    private BluetoothAdapter adapter;
+    private BluetoothSocket socket;
+    private InputStream is;
+    private OutputStreamWriter os;
+    private BluetoothDevice remoteDevice;
+    private Set<BluetoothDevice> pairedDevices;
+
+    private BroadcastReceiver discoveryResult = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            android.util.Log.e("TrackingFlow", "WWWTTTFFF");
+            unregisterReceiver(this);
+            remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            new Thread(readerClient).start();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -52,22 +69,12 @@ public class MainActivity extends Activity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Get local Bluetooth adapter
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (mBluetoothAdapter == null) //If the adapter is null, then Bluetooth is not supported
-        {
-            Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_LONG).show();
-            finish();
-            return;
-        }
-
         //UI
-        b1 = (Button) findViewById(R.id.button1);
-        b2=(Button)findViewById(R.id.button2);
-        b3=(Button)findViewById(R.id.button3);
-        b4=(Button)findViewById(R.id.button4);
+        //b1 = (Button) findViewById(R.id.button1);
+        //b2=(Button)findViewById(R.id.button2);
+        //b3=(Button)findViewById(R.id.button3);
+        //b4=(Button)findViewById(R.id.button4);
         lv = (ListView)findViewById(R.id.listView);
-
         et=(EditText) findViewById(R.id.txtMessage);
         cbServer = (CheckBox)findViewById(R.id.cbServer);
         cbServer.setChecked(true);
@@ -82,38 +89,240 @@ public class MainActivity extends Activity
             }
         });
 
-        list(null); //list devices automatically to UI
+        adapter = BluetoothAdapter.getDefaultAdapter();
+        if (adapter == null) //If the adapter is null, then Bluetooth is not supported
+        {
+            Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        list(null);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data)
+    {
+        super.onActivityResult(requestCode, resultCode, data);
+        android.util.Log.e("TrackingFlow", "Creating thread to start listening...");
+        new Thread(readerServer).start();
+    }
+
+    @Override
+    protected void onDestroy()
+    {
+        super.onDestroy();
+        try {unregisterReceiver(discoveryResult);}catch(Exception e){e.printStackTrace();}
+        if(socket != null){
+            try
+            {
+                is.close();
+                os.close();
+                socket.close();
+                CONTINUE_READ_WRITE = false;
+            }
+            catch(Exception e){}
+            CONTINUE_READ_WRITE = false;
+        }
+    }
+
+    private Runnable readerServer = new Runnable()
+    {
+        public void run()
+        {
+            Toast.makeText(getApplicationContext(), "readerServer is running" ,Toast.LENGTH_SHORT).show();
+
+            adapter = BluetoothAdapter.getDefaultAdapter();
+            UUID uuid = UUID.fromString("4e5d48e0-75df-11e3-981f-0800200c9a66");
+            try {
+                BluetoothServerSocket serverSocket = adapter.listenUsingRfcommWithServiceRecord("BLTServer", uuid);
+                android.util.Log.e("TrackingFlow", "Listening...");
+                socket = serverSocket.accept();
+                android.util.Log.e("TrackingFlow", "Socket accepted...");
+                is = socket.getInputStream();
+                os = new OutputStreamWriter(socket.getOutputStream());
+                new Thread(writterClient).start();
+
+                int bufferSize = 1024;
+                int bytesRead = -1;
+                byte[] buffer = new byte[bufferSize];
+                //Keep reading the messages while connection is open...
+                while(CONTINUE_READ_WRITE){
+                    final StringBuilder sb = new StringBuilder();
+                    bytesRead = is.read(buffer);
+                    if (bytesRead != -1) {
+                        String result = "";
+                        while ((bytesRead == bufferSize) && (buffer[bufferSize-1] != 0)){
+                            result = result + new String(buffer, 0, bytesRead - 1);
+                            bytesRead = is.read(buffer);
+                        }
+                        result = result + new String(buffer, 0, bytesRead - 1);
+                        sb.append(result);
+                    }
+                    android.util.Log.e("TrackingFlow", "Read: " + sb.toString());
+                    //Show message on UIThread
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, sb.toString(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            } catch (IOException e) {e.printStackTrace();}
+        }
+    };
+
+    private Runnable readerClient = new Runnable()
+    {
+        @Override
+        public void run()
+        {
+            Toast.makeText(getApplicationContext(), "readerClient is running" ,Toast.LENGTH_SHORT).show();
+
+            try
+            {
+                android.util.Log.e("TrackingFlow", "Found: " + remoteDevice.getName());
+                UUID uuid = UUID.fromString("4e5d48e0-75df-11e3-981f-0800200c9a66");
+                socket = remoteDevice.createRfcommSocketToServiceRecord(uuid);
+                socket.connect();
+                android.util.Log.e("TrackingFlow", "Connected...");
+                os = new OutputStreamWriter(socket.getOutputStream());
+                is = socket.getInputStream();
+                android.util.Log.e("TrackingFlow", "WWWTTTFFF34243");
+                new Thread(writterClient).start();
+                android.util.Log.e("TrackingFlow", "WWWTTTFFF3wwgftggggwww4243: " + CONTINUE_READ_WRITE);
+                int bufferSize = 1024;
+                int bytesRead = -1;
+                byte[] buffer = new byte[bufferSize];
+                //Keep reading the messages while connection is open...
+                while(CONTINUE_READ_WRITE){
+                    android.util.Log.e("TrackingFlow", "WWWTTTFFF3wwwww4243");
+                    final StringBuilder sb = new StringBuilder();
+                    bytesRead = is.read(buffer);
+                    if (bytesRead != -1) {
+                        String result = "";
+                        while ((bytesRead == bufferSize) && (buffer[bufferSize-1] != 0)){
+                            result = result + new String(buffer, 0, bytesRead - 1);
+                            bytesRead = is.read(buffer);
+                        }
+                        result = result + new String(buffer, 0, bytesRead - 1);
+                        sb.append(result);
+                    }
+
+                    android.util.Log.e("TrackingFlow", "Read: " + sb.toString());
+
+                    //Show message on UIThread
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, sb.toString(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            } catch (IOException e) {e.printStackTrace();}
+        }
+    };
+
+    private Runnable writterServer = new Runnable()
+    {
+        @Override
+        public void run() {
+            int index = 0;
+            while(CONTINUE_READ_WRITE){
+                try {
+                    os.write("Message From Server" + (index++) + "\n");
+                    os.flush();
+                    Thread.sleep(2000);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    };
+
+    private Runnable writterClient = new Runnable() {
+
+        @Override
+        public void run() {
+            int index = 0;
+            while (CONTINUE_READ_WRITE) {
+                try {
+                    os.write("Message From Client" + (index++) + "\n");
+                    os.flush();
+                    Thread.sleep(2000);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    };
+
+    public void openBT(View v)
+    {
+        //TODO if selected device empty - take action
+        //TODO if bt is not allowed!
+
+        if(cbServer.isChecked())
+        {
+            Toast.makeText(getApplicationContext(), "This device is server" ,Toast.LENGTH_SHORT).show();
+
+            //Always make sure that Bluetooth server is discoverable during listening...
+            visible(null);
+
+            //run action
+            //AsyncTask.execute(readerServer); //no UI interaction
+            new Thread(readerServer).start();
+        }
+        else //CLIENT
+        {
+            Toast.makeText(getApplicationContext(), "This device is client" ,Toast.LENGTH_SHORT).show();
+
+            //adapter = BluetoothAdapter.getDefaultAdapter(); // Get local Bluetooth adapter
+            if(adapter != null && adapter.isDiscovering())
+            {
+                Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_LONG).show();
+                adapter.cancelDiscovery();
+            }
+            adapter.startDiscovery();
+
+            //run action
+            //AsyncTask.execute(readerClient); //no UI interaction //fail
+            new Thread(readerClient).start();
+        }
+
     }
 
     public void on(View v) //turning on BT when is off
     {
-        if (!mBluetoothAdapter.isEnabled())
+        if (!adapter.isEnabled())
         {
             Intent turnOn = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(turnOn, 0);
             Toast.makeText(getApplicationContext(), "Turned on",Toast.LENGTH_LONG).show();
-        } else {
-            Toast.makeText(getApplicationContext(), "Already on", Toast.LENGTH_LONG).show();
-        }
+        } else
+            {
+                Toast.makeText(getApplicationContext(), "Already on", Toast.LENGTH_LONG).show();
+            }
 
         list(null); //list devices automatically to UI
     }
 
     public void off(View v) //turning off BT device on phone
     {
-        mBluetoothAdapter.disable();
+        adapter.disable();
         Toast.makeText(getApplicationContext(), "Turned off" ,Toast.LENGTH_LONG).show();
     }
 
     public void visible(View v) //BT device discoverable
     {
+        //private static final int DISCOVERABLE_REQUEST_CODE = 0x1;
         Intent getVisible = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
         startActivityForResult(getVisible, 0);
     }
 
     public void list(View v)
     {
-        pairedDevices = mBluetoothAdapter.getBondedDevices(); //list of devices
+        pairedDevices = adapter.getBondedDevices(); //list of devices
         ArrayList list = new ArrayList(); //for UI
 
         for(BluetoothDevice bt : pairedDevices) //foreach
@@ -124,24 +333,6 @@ public class MainActivity extends Activity
 
         final ArrayAdapter adapter = new ArrayAdapter(this,android.R.layout.simple_list_item_1, list);
         lv.setAdapter(adapter);
-    }
-
-    public String GetNameOfDevice()  //returning name of this device
-    {
-        String status;
-        if (mBluetoothAdapter.isEnabled())
-        {
-            String mydeviceaddress = mBluetoothAdapter.getAddress();
-            String mydevicename = mBluetoothAdapter.getName();
-            status = mydevicename + " : " + mydeviceaddress;
-        }
-        else
-        {
-            status = "Bluetooth is not Enabled.";
-        }
-
-        //Toast.makeText(this, status, Toast.LENGTH_LONG).show();
-        return status;
     }
 
     public void selectBTdevice(String name) //for selecting device from list which is used in procedures
@@ -155,264 +346,9 @@ public class MainActivity extends Activity
         {
             if(name.equals(bt.getName()))
             {
-                mmDevice = bt;
-                Toast.makeText(getApplicationContext(), "Selected " + mmDevice.getName(), Toast.LENGTH_SHORT ).show();
+                remoteDevice = bt;
+                Toast.makeText(getApplicationContext(), "Selected " + remoteDevice.getName(), Toast.LENGTH_SHORT ).show();
             }
         }
     }
-
-    public void openBT(View v)
-    {
-        //TODO if selected device empty - take action
-        //TODO if bt is not allowed!
-
-        if(cbServer.isChecked())
-        {
-            Toast.makeText(getApplicationContext(), "This device is server" ,Toast.LENGTH_SHORT).show();
-            new AcceptThread().run();
-            //TODO ERROR here is probably source of troubles
-
-            Toast.makeText(getApplicationContext(), "Server thread accepted" ,Toast.LENGTH_SHORT).show();
-
-            /*
-            try
-            {
-                mmSocket = mmDevice.createRfcommSocketToServiceRecord(MY_UUID); //ask for string
-                mmSocket.connect();
-                mmOutputStream = mmSocket.getOutputStream();
-                mmInputStream = mmSocket.getInputStream();
-                //beginListenForData();
-                //manageMyConnectedSocket(mmSocket);
-                Toast.makeText(getApplicationContext(), "Bluetooth Opened" ,Toast.LENGTH_SHORT).show();
-            }
-            catch(Exception e)
-            {
-                e.printStackTrace();
-                Toast.makeText(getApplicationContext(), "Bluetooth connection failed" ,Toast.LENGTH_SHORT).show();
-            }
-                */
-        }
-        else
-        {
-            Toast.makeText(getApplicationContext(), "This device is client" ,Toast.LENGTH_SHORT).show();
-            new ConnectThread(mmDevice).run();
-            //TODO ERROR here is probably source of troubles
-        }
-
-
-    }
-
-    public void beginListenForData()
-    {
-        final Handler handler = new Handler();
-        final byte delimiter = 10; //This is the ASCII code for a newline character
-
-        final boolean[] stopWorker = {false};
-        final int[] readBufferPosition = {0};
-        final byte[] readBuffer = new byte[1024];
-        Thread workerThread = new Thread(new Runnable()
-        {
-            public void run()
-            {
-                while (!Thread.currentThread().isInterrupted() && !stopWorker[0])
-                {
-                    try {
-                        int bytesAvailable = mmInputStream.available();
-                        if (bytesAvailable > 0)
-                        {
-                            byte[] packetBytes = new byte[bytesAvailable];
-                            mmInputStream.read(packetBytes);
-                            for (int i = 0; i < bytesAvailable; i++) {
-                                byte b = packetBytes[i];
-                                if (b == delimiter) {
-                                    byte[] encodedBytes = new byte[readBufferPosition[0]];
-                                    System.arraycopy(readBuffer, 0, encodedBytes, 0, encodedBytes.length);
-                                    final String data = new String(encodedBytes, "US-ASCII");
-                                    readBufferPosition[0] = 0;
-
-                                    handler.post(new Runnable()
-                                    {
-                                        public void run()
-                                        {
-                                            Toast.makeText(getApplicationContext(), data, Toast.LENGTH_SHORT).show();
-                                            //myLabel.setText(data);
-                                        }
-                                    });
-                                } else {
-                                    readBuffer[readBufferPosition[0]++] = b;
-                                }
-                            }
-                        }
-                    } catch (IOException ex) {
-                        stopWorker[0] = true;
-                    }
-                }
-            }
-        });
-
-        workerThread.start();
-    }
-
-    public void sendData()
-    {
-        String msg = et.getText().toString();
-        msg += "\n";
-
-        try
-        {
-            mmOutputStream.write(msg.getBytes());
-            mmOutputStream.write('A');
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-        }
-
-        Toast.makeText(getApplicationContext(), "Data Sent" ,Toast.LENGTH_SHORT).show();
-        //myLabel.setText("Data Sent");
-    }
-
-    private void manageMyConnectedSocket(BluetoothSocket mmSocket)
-    {
-        //my own testing way of this method
-
-        Toast.makeText(this, "here manageMyConnectedSocket", Toast.LENGTH_LONG).show();
-
-        if(cbServer.isChecked()) {
-            //server
-            beginListenForData();
-        }
-        else {
-            //client
-            sendData();
-        }
-    }
-
-    private class AcceptThread extends Thread //server, dont edit method! Is from official source https://developer.android.com/guide/topics/connectivity/bluetooth.html
-    {
-        private final BluetoothServerSocket mmServerSocket;
-
-        public AcceptThread()
-        {
-            // Use a temporary object that is later assigned to mmServerSocket
-            // because mmServerSocket is final.
-            BluetoothServerSocket tmp = null;
-            try
-            {
-                // MY_UUID is the app's UUID string, also used by the client code.
-                tmp = mBluetoothAdapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
-            }
-            catch (IOException e)
-            {
-                //Log.e(TAG, "Socket's listen() method failed", e);
-            }
-            mmServerSocket = tmp;
-        }
-
-        public void run()
-        {
-            BluetoothSocket socket = null;
-            // Keep listening until exception occurs or a socket is returned.
-            while (true) {
-                try {
-                    socket = mmServerSocket.accept();
-                } catch (IOException e) {
-                    Log.e(TAG, "Socket's accept() method failed", e);
-                    break;
-                }
-
-                if (socket != null) {
-                    // A connection was accepted. Perform work associated with
-                    // the connection in a separate thread.
-
-                    Toast.makeText(getApplicationContext(), "sucessfull server" ,Toast.LENGTH_SHORT).show(); //DEBUG
-                    //manageMyConnectedSocket(socket);
-
-                    try
-                    {
-                        mmServerSocket.close();
-                    }
-                    catch (IOException e)
-                    {
-                        e.printStackTrace();
-                    }
-                    break;
-                }
-            }
-        }
-
-        public void cancel() // Closes the connect socket and causes the thread to finish.
-        {
-            try {
-                mmServerSocket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Could not close the connect socket", e);
-            }
-        }
-    } //accept
-
-    private class ConnectThread extends Thread //client, dont edit method - it is from official source https://developer.android.com/guide/topics/connectivity/bluetooth.html
-    {
-        private final BluetoothSocket mmSocket;
-        private final BluetoothDevice mmDevice;
-
-        public ConnectThread(BluetoothDevice device)
-        {
-            // Use a temporary object that is later assigned to mmSocket
-            // because mmSocket is final.
-            BluetoothSocket tmp = null;
-            mmDevice = device;
-
-            try {
-                // Get a BluetoothSocket to connect with the given BluetoothDevice.
-                // MY_UUID is the app's UUID string, also used in the server code.
-                tmp = device.createRfcommSocketToServiceRecord(MY_UUID);
-            } catch (IOException e) {
-                Log.e(TAG, "Socket's create() method failed", e);
-            }
-            mmSocket = tmp;
-        }
-
-        public void run() {
-            // Cancel discovery because it otherwise slows down the connection.
-            mBluetoothAdapter.cancelDiscovery();
-
-            try {
-                // Connect to the remote device through the socket. This call blocks
-                // until it succeeds or throws an exception.
-                mmSocket.connect();
-                Toast.makeText(getApplicationContext(), "mmsocket connected" ,Toast.LENGTH_SHORT).show(); //DEBUG
-            }
-            catch (IOException connectException) {
-                // Unable to connect; close the socket and return.
-                try {
-                    mmSocket.close();
-                } catch (IOException closeException) {
-                    Log.e(TAG, "Could not close the client socket", closeException);
-                }
-                return;
-            }
-
-            // The connection attempt succeeded. Perform work associated with
-            // the connection in a separate thread.
-            Toast.makeText(getApplicationContext(), "sucessfull client" ,Toast.LENGTH_SHORT).show(); //DEBUG
-            //manageMyConnectedSocket(mmSocket);
-
-        }
-
-        // Closes the client socket and causes the thread to finish.
-        public void cancel() {
-            try {
-                mmSocket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Could not close the client socket", e);
-            }
-        }
-    }
-
-    //another solution
-    //https://stackoverflow.com/questions/36596304/how-to-start-bluetooth-connect-thread-when-pressed-button
-
-    //https://www.programcreek.com/java-api-examples/index.php?source_dir=rpi_wakeup_light-master/android/src/main/java/com/hairysoft/bt/ConnectThread.java
-
 }
