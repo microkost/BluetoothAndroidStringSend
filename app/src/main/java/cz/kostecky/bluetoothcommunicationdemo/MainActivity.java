@@ -35,8 +35,8 @@ public class MainActivity extends Activity
     private BluetoothSocket mmSocket;
     //private BluetoothServerSocket mmServerSocket;
     private BluetoothDevice mmDevice;
-    OutputStream mmOutputStream;
-    InputStream mmInputStream;
+    OutputStream mmOutputStream; //used?
+    InputStream mmInputStream; //used?
 
     private static String NAME = "cz.kostecky.bluetoothcommunicationdemo"; //id of app
     private static UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fc"); //SerialPortService ID
@@ -95,6 +95,8 @@ public class MainActivity extends Activity
         } else {
             Toast.makeText(getApplicationContext(), "Already on", Toast.LENGTH_LONG).show();
         }
+
+        list(null); //list devices automatically to UI
     }
 
     public void off(View v) //turning off BT device on phone
@@ -142,9 +144,9 @@ public class MainActivity extends Activity
         return status;
     }
 
-    public void selectBTdevice(String name) //for selecting device which is used in procedures
+    public void selectBTdevice(String name) //for selecting device from list which is used in procedures
     {
-        if(pairedDevices.isEmpty()){
+        if(pairedDevices.isEmpty()) {
             list(null);
             Toast.makeText(getApplicationContext(), "Selecting was unsucessful, no devices in list." ,Toast.LENGTH_SHORT ).show();
         }
@@ -154,7 +156,7 @@ public class MainActivity extends Activity
             if(name.equals(bt.getName()))
             {
                 mmDevice = bt;
-                Toast.makeText(getApplicationContext(), "Selected " + mmDevice.getName() + " permanently", Toast.LENGTH_SHORT ).show();
+                Toast.makeText(getApplicationContext(), "Selected " + mmDevice.getName(), Toast.LENGTH_SHORT ).show();
             }
         }
     }
@@ -162,37 +164,42 @@ public class MainActivity extends Activity
     public void openBT(View v)
     {
         //TODO if selected device empty - take action
+        //TODO if bt is not allowed!
 
         if(cbServer.isChecked())
         {
             Toast.makeText(getApplicationContext(), "This device is server" ,Toast.LENGTH_SHORT).show();
             new AcceptThread().run();
+            //TODO ERROR here is probably source of troubles
 
+            Toast.makeText(getApplicationContext(), "Server thread accepted" ,Toast.LENGTH_SHORT).show();
+
+            /*
+            try
+            {
+                mmSocket = mmDevice.createRfcommSocketToServiceRecord(MY_UUID); //ask for string
+                mmSocket.connect();
+                mmOutputStream = mmSocket.getOutputStream();
+                mmInputStream = mmSocket.getInputStream();
+                //beginListenForData();
+                //manageMyConnectedSocket(mmSocket);
+                Toast.makeText(getApplicationContext(), "Bluetooth Opened" ,Toast.LENGTH_SHORT).show();
+            }
+            catch(Exception e)
+            {
+                e.printStackTrace();
+                Toast.makeText(getApplicationContext(), "Bluetooth connection failed" ,Toast.LENGTH_SHORT).show();
+            }
+                */
         }
         else
         {
             Toast.makeText(getApplicationContext(), "This device is client" ,Toast.LENGTH_SHORT).show();
             new ConnectThread(mmDevice).run();
+            //TODO ERROR here is probably source of troubles
         }
 
-        /*
-        try
-        {
-            UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"); //Standard //SerialPortService ID
-            mmSocket = mmDevice.createRfcommSocketToServiceRecord(uuid);
-            mmSocket.connect();
-            mmOutputStream = mmSocket.getOutputStream();
-            mmInputStream = mmSocket.getInputStream();
-            //beginListenForData();
-            Toast.makeText(getApplicationContext(), "Bluetooth Opened" ,Toast.LENGTH_SHORT).show();
-        }
-        catch(Exception e)
-        {
-            e.printStackTrace();
-            Toast.makeText(getApplicationContext(), "Bluetooth connection failed" ,Toast.LENGTH_SHORT).show();
-            //throw new RuntimeException(e);
-        }
-        */
+
     }
 
     public void beginListenForData()
@@ -269,7 +276,7 @@ public class MainActivity extends Activity
     {
         //my own testing way of this method
 
-        Toast.makeText(this, "it is here", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "here manageMyConnectedSocket", Toast.LENGTH_LONG).show();
 
         if(cbServer.isChecked()) {
             //server
@@ -281,7 +288,7 @@ public class MainActivity extends Activity
         }
     }
 
-    private class AcceptThread extends Thread //server
+    private class AcceptThread extends Thread //server, dont edit method! Is from official source https://developer.android.com/guide/topics/connectivity/bluetooth.html
     {
         private final BluetoothServerSocket mmServerSocket;
 
@@ -302,7 +309,8 @@ public class MainActivity extends Activity
             mmServerSocket = tmp;
         }
 
-        public void run() {
+        public void run()
+        {
             BluetoothSocket socket = null;
             // Keep listening until exception occurs or a socket is returned.
             while (true) {
@@ -318,7 +326,7 @@ public class MainActivity extends Activity
                     // the connection in a separate thread.
 
                     Toast.makeText(getApplicationContext(), "sucessfull server" ,Toast.LENGTH_SHORT).show(); //DEBUG
-                    manageMyConnectedSocket(socket);
+                    //manageMyConnectedSocket(socket);
 
                     try
                     {
@@ -333,8 +341,8 @@ public class MainActivity extends Activity
             }
         }
 
-        // Closes the connect socket and causes the thread to finish.
-        public void cancel() {
+        public void cancel() // Closes the connect socket and causes the thread to finish.
+        {
             try {
                 mmServerSocket.close();
             } catch (IOException e) {
@@ -343,7 +351,7 @@ public class MainActivity extends Activity
         }
     } //accept
 
-    private class ConnectThread extends Thread //client
+    private class ConnectThread extends Thread //client, dont edit method - it is from official source https://developer.android.com/guide/topics/connectivity/bluetooth.html
     {
         private final BluetoothSocket mmSocket;
         private final BluetoothDevice mmDevice;
@@ -388,7 +396,7 @@ public class MainActivity extends Activity
             // The connection attempt succeeded. Perform work associated with
             // the connection in a separate thread.
             Toast.makeText(getApplicationContext(), "sucessfull client" ,Toast.LENGTH_SHORT).show(); //DEBUG
-            manageMyConnectedSocket(mmSocket);
+            //manageMyConnectedSocket(mmSocket);
 
         }
 
@@ -402,5 +410,9 @@ public class MainActivity extends Activity
         }
     }
 
+    //another solution
+    //https://stackoverflow.com/questions/36596304/how-to-start-bluetooth-connect-thread-when-pressed-button
+
+    //https://www.programcreek.com/java-api-examples/index.php?source_dir=rpi_wakeup_light-master/android/src/main/java/com/hairysoft/bt/ConnectThread.java
 
 }
