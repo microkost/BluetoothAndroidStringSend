@@ -62,7 +62,8 @@
         android:layout_below="@+id/txtMessage"
         android:layout_toEndOf="@+id/button5"
         android:layout_toRightOf="@+id/button5"
-        android:text="Send"/>
+        android:text="Send"
+        android:onClick="sendBtnClick"/>
 
     <Button
         android:id="@+id/button5"

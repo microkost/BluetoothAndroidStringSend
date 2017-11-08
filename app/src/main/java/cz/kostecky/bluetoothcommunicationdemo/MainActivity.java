@@ -37,8 +37,8 @@ public class MainActivity extends Activity
 {
     private boolean CONTINUE_READ_WRITE = true;
 
-    //private static String NAME = "cz.kostecky.bluetoothcommunicationdemo"; //id of app
-    //private static UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"); //SerialPortService ID
+    private static String NAME = "cz.kostecky.bluetoothcommunicationdemo"; //id of app
+    private static UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"); //SerialPortService ID
 
     Button b1,b2,b3,b4;
     EditText et;
@@ -48,7 +48,7 @@ public class MainActivity extends Activity
     private BluetoothAdapter adapter;
     private BluetoothSocket socket;
     private InputStream is;
-    private OutputStreamWriter os;
+    private OutputStream os;
     private BluetoothDevice remoteDevice;
     private Set<BluetoothDevice> pairedDevices;
 
@@ -59,7 +59,7 @@ public class MainActivity extends Activity
             android.util.Log.e("TrackingFlow", "WWWTTTFFF");
             unregisterReceiver(this);
             remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            new Thread(readerClient).start();
+            //new Thread(readerClient).start();
         }
     };
 
@@ -100,6 +100,7 @@ public class MainActivity extends Activity
         list(null);
     }
 
+    /*
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data)
     {
@@ -107,6 +108,7 @@ public class MainActivity extends Activity
         android.util.Log.e("TrackingFlow", "Creating thread to start listening...");
         new Thread(readerServer).start();
     }
+    */
 
     @Override
     protected void onDestroy()
@@ -126,22 +128,42 @@ public class MainActivity extends Activity
         }
     }
 
-    private Runnable readerServer = new Runnable()
+    private Runnable serverListener = new Runnable()
     {
         public void run()
         {
-            Toast.makeText(getApplicationContext(), "readerServer is running" ,Toast.LENGTH_SHORT).show();
+            //Toast.makeText(getApplicationContext(), "readerServer is running" ,Toast.LENGTH_SHORT).show();
 
             adapter = BluetoothAdapter.getDefaultAdapter();
-            UUID uuid = UUID.fromString("4e5d48e0-75df-11e3-981f-0800200c9a66");
+
+            //otice that the method “accept” in the BluetoothServerSocket class blocks the current execution thread until a client successfully connects, returning a BluetoothSocket instance that will be used for further communication between them.
+
+            BluetoothServerSocket tmpsocket = null;
             try {
-                BluetoothServerSocket serverSocket = adapter.listenUsingRfcommWithServiceRecord("BLTServer", uuid);
-                android.util.Log.e("TrackingFlow", "Listening...");
-                socket = serverSocket.accept();
+                // MY_UUID is the app's UUID string, also used by the client code.
+                tmpsocket = adapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
+            }
+            catch (IOException e) {
+                Log.e(TAG, "Socket's listen() method failed", e);
+            }
+
+            android.util.Log.e("TrackingFlow", "Listening...");
+
+            try {
+                socket = tmpsocket.accept();
+            }
+            catch (IOException e) {
+                Log.e(TAG, "Socket's accept() method failed", e);
+                e.printStackTrace();
+            }
+
+
+            try{
                 android.util.Log.e("TrackingFlow", "Socket accepted...");
                 is = socket.getInputStream();
-                os = new OutputStreamWriter(socket.getOutputStream());
-                new Thread(writterClient).start();
+                os = socket.getOutputStream();
+                new Thread(writter).start();
+
 
                 int bufferSize = 1024;
                 int bytesRead = -1;
@@ -168,28 +190,37 @@ public class MainActivity extends Activity
                         }
                     });
                 }
-            } catch (IOException e) {e.printStackTrace();}
+            }
+            catch(IOException e){
+                Log.e(TAG, "Error with...", e);
+                e.printStackTrace();
+            }
+
+
+
         }
     };
 
-    private Runnable readerClient = new Runnable()
+
+    private Runnable clientConnecter = new Runnable()
     {
         @Override
         public void run()
         {
-            Toast.makeText(getApplicationContext(), "readerClient is running" ,Toast.LENGTH_SHORT).show();
+            //Toast.makeText(getApplicationContext(), "readerClient is running" ,Toast.LENGTH_SHORT).show();
 
             try
             {
                 android.util.Log.e("TrackingFlow", "Found: " + remoteDevice.getName());
-                UUID uuid = UUID.fromString("4e5d48e0-75df-11e3-981f-0800200c9a66");
-                socket = remoteDevice.createRfcommSocketToServiceRecord(uuid);
+
+                socket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
                 socket.connect();
                 android.util.Log.e("TrackingFlow", "Connected...");
-                os = new OutputStreamWriter(socket.getOutputStream());
+
+                os = socket.getOutputStream();
                 is = socket.getInputStream();
                 android.util.Log.e("TrackingFlow", "WWWTTTFFF34243");
-                new Thread(writterClient).start();
+                new Thread(writter).start();
                 android.util.Log.e("TrackingFlow", "WWWTTTFFF3wwgftggggwww4243: " + CONTINUE_READ_WRITE);
                 int bufferSize = 1024;
                 int bytesRead = -1;
@@ -219,35 +250,20 @@ public class MainActivity extends Activity
                         }
                     });
                 }
-            } catch (IOException e) {e.printStackTrace();}
-        }
-    };
-
-    private Runnable writterServer = new Runnable()
-    {
-        @Override
-        public void run() {
-            int index = 0;
-            while(CONTINUE_READ_WRITE){
-                try {
-                    os.write("Message From Server" + (index++) + "\n");
-                    os.flush();
-                    Thread.sleep(2000);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
             }
+            catch (IOException e) {e.printStackTrace();}
         }
     };
 
-    private Runnable writterClient = new Runnable() {
+
+    private Runnable writter = new Runnable() {
 
         @Override
         public void run() {
             int index = 0;
             while (CONTINUE_READ_WRITE) {
                 try {
-                    os.write("Message From Client" + (index++) + "\n");
+                    //os.write("Message " + (index++) + "\n");
                     os.flush();
                     Thread.sleep(2000);
                 } catch (Exception e) {
@@ -267,29 +283,29 @@ public class MainActivity extends Activity
             Toast.makeText(getApplicationContext(), "This device is server" ,Toast.LENGTH_SHORT).show();
 
             //Always make sure that Bluetooth server is discoverable during listening...
-            visible(null);
+            //visible(null);
 
             //run action
             //AsyncTask.execute(readerServer); //no UI interaction
-            new Thread(readerServer).start();
+            new Thread(serverListener).start();
+
         }
         else //CLIENT
         {
             Toast.makeText(getApplicationContext(), "This device is client" ,Toast.LENGTH_SHORT).show();
-
-            //adapter = BluetoothAdapter.getDefaultAdapter(); // Get local Bluetooth adapter
-            if(adapter != null && adapter.isDiscovering())
-            {
-                Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_LONG).show();
-                adapter.cancelDiscovery();
-            }
-            adapter.startDiscovery();
-
-            //run action
-            //AsyncTask.execute(readerClient); //no UI interaction //fail
-            new Thread(readerClient).start();
+            new Thread(clientConnecter).start();
         }
 
+    }
+
+
+    public void sendBtnClick(View v){
+        String textToSend = et.getText().toString();
+        byte[] b = textToSend.getBytes();
+
+        try {
+            os.write(b);
+        } catch (IOException e) { }
     }
 
     public void on(View v) //turning on BT when is off
@@ -352,3 +368,4 @@ public class MainActivity extends Activity
         }
     }
 }
+
