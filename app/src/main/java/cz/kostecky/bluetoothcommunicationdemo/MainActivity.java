@@ -305,9 +305,9 @@ public class MainActivity extends Activity
             startActivityForResult(turnOn, 0);
             Toast.makeText(getApplicationContext(), "Turned on",Toast.LENGTH_LONG).show();
         } else
-            {
-                Toast.makeText(getApplicationContext(), "Already on", Toast.LENGTH_LONG).show();
-            }
+        {
+            Toast.makeText(getApplicationContext(), "Already on", Toast.LENGTH_LONG).show();
+        }
 
         list(null); //list devices automatically to UI
     }
