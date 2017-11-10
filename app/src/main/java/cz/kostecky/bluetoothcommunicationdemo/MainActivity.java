@@ -1,3 +1,5 @@
+//DEMO http://www.doepiccoding.com/blog/?p=232
+
 package cz.kostecky.bluetoothcommunicationdemo;
 
 import android.app.Activity;
@@ -34,26 +36,31 @@ import static android.content.ContentValues.TAG;
 public class MainActivity extends Activity
 {
     private boolean CONTINUE_READ_WRITE = true;
+    private boolean CONNECTION_ENSTABLISHED = false;
 
     private static String NAME = "cz.kostecky.bluetoothcommunicationdemo"; //id of app
     private static UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"); //SerialPortService ID // MY_UUID is the app's UUID string, also used by the client code.
 
+    Button bSend;
     EditText et;
     ListView lv;
     CheckBox cbServer;
 
-    /*
-    ArrayList<String> chatHistory;
-    //ArrayAdapter<String> chatHistory;
-    //ArrayList<String> listItems=new ArrayList<String>();
-    */
-
-    private BluetoothAdapter adapter; //local adapter
-    private BluetoothSocket socket; //local socket
-    private InputStream is;  //data streams incoming
-    private OutputStream os; //data stream outcoming
-    private BluetoothDevice remoteDevice; //
+    private BluetoothAdapter adapter;
+    private BluetoothSocket socket;
+    private InputStream is;
+    private OutputStream os;
+    private BluetoothDevice remoteDevice;
     private Set<BluetoothDevice> pairedDevices;
+
+    private BroadcastReceiver discoveryResult = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            unregisterReceiver(this);
+            remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -62,6 +69,7 @@ public class MainActivity extends Activity
         setContentView(R.layout.activity_main);
 
         //UI
+        bSend = (Button) findViewById(R.id.button6);
         lv = (ListView)findViewById(R.id.listView);
         et=(EditText) findViewById(R.id.txtMessage);
         cbServer = (CheckBox)findViewById(R.id.cbServer);
@@ -71,15 +79,14 @@ public class MainActivity extends Activity
         {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id)
             {
-                //handles listview onclick event
                 String name = (String) parent.getItemAtPosition(position);
-
+                //Toast.makeText(getApplicationContext(), "Selected " + name, Toast.LENGTH_LONG).show();
                 selectBTdevice(name); //selected device will be set globally
-                openBT(null); //starting to listen on port
+                openBT(null);
             }
         });
 
-        adapter = BluetoothAdapter.getDefaultAdapter(); //enables devices bluetooth
+        adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter == null) //If the adapter is null, then Bluetooth is not supported
         {
             Toast.makeText(this, "Bluetooth is not available", Toast.LENGTH_LONG).show();
@@ -87,32 +94,27 @@ public class MainActivity extends Activity
             return;
         }
 
-        list(null); //shows already paired devices
-        Toast.makeText(getApplicationContext(), "Pairing more devices through system" ,Toast.LENGTH_SHORT).show();
+        list(null);
     }
 
-    public void openBT(View v) //opening communication
+    public void openBT(View v)
     {
         if(adapter == null)
         {
             adapter = BluetoothAdapter.getDefaultAdapter();
         }
 
-        /*
-        final ArrayAdapter adapter = new ArrayAdapter(this,android.R.layout.simple_list_item_1, chatHistory);
-        lv.setAdapter(adapter);
-        */
-
-        if(pairedDevices.isEmpty() || remoteDevice == null) //testing if devices are selected
+        if(pairedDevices.isEmpty() || remoteDevice == null)
         {
-            Toast.makeText(getApplicationContext(), "Choose partner's device first" ,Toast.LENGTH_SHORT).show();
-            return;
+            Toast.makeText(this, "Paired device is not selected", Toast.LENGTH_SHORT).show();
+
         }
 
+        Toast.makeText(this, "Opening...", Toast.LENGTH_SHORT).show();
         if(cbServer.isChecked())
         {
             //Toast.makeText(getApplicationContext(), "This device is server" ,Toast.LENGTH_SHORT).show();
-            new Thread(serverListener).start(); //needs to run in different thread than UI
+            new Thread(serverListener).start();
 
         }
         else //CLIENT
@@ -126,24 +128,26 @@ public class MainActivity extends Activity
     {
         public void run()
         {
-            adapter = BluetoothAdapter.getDefaultAdapter();
-            BluetoothServerSocket tmpsocket = null; //otice that the method “accept” in the BluetoothServerSocket class blocks the current execution thread until a client successfully connects, returning a BluetoothSocket instance that will be used for further communication between them.
+            BluetoothServerSocket tmpsocket = null;
 
             try
             {
                 tmpsocket = adapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
                 android.util.Log.e("TrackingFlow", "Listening...");
             }
-            catch (IOException e) {
+            catch (IOException e)
+            {
                 Log.e(TAG, "Socket's listen() method failed", e);
             }
 
             try
             {
-                socket = tmpsocket.accept();
+                socket = tmpsocket.accept(); //otice that the method “accept” in the BluetoothServerSocket class blocks the current execution thread until a client successfully connects, returning a BluetoothSocket instance that will be used for further communication between them.
                 android.util.Log.e("TrackingFlow", "Socket accepted...");
+                CONNECTION_ENSTABLISHED = true;
             }
-            catch (IOException e) {
+            catch (IOException e)
+            {
                 Log.e(TAG, "Socket's accept() method failed", e);
                 e.printStackTrace();
             }
@@ -154,7 +158,6 @@ public class MainActivity extends Activity
                 os = socket.getOutputStream();
                 new Thread(writter).start();
 
-
                 int bufferSize = 1024;
                 int bytesRead = -1;
                 byte[] buffer = new byte[bufferSize];
@@ -163,8 +166,7 @@ public class MainActivity extends Activity
                 {
                     final StringBuilder sb = new StringBuilder();
                     bytesRead = is.read(buffer);
-                    if (bytesRead != -1) //making magic with byte transfer
-                    {
+                    if (bytesRead != -1) {
                         String result = "";
                         while ((bytesRead == bufferSize) && (buffer[bufferSize-1] != 0))
                         {
@@ -176,14 +178,9 @@ public class MainActivity extends Activity
                     }
                     android.util.Log.e("TrackingFlow", "Read: " + sb.toString());
 
-                    runOnUiThread(new Runnable() //Show message on UIThread
-                    {
+                    runOnUiThread(new Runnable() {
                         @Override
-                        public void run()
-                        {
-                            //chatHistory.add(sb.toString());
-                            //adapter.notifyDataSetChanged();
-                            //adapter.add
+                        public void run() { //Show message on UIThread
 
                             Toast.makeText(MainActivity.this, sb.toString(), Toast.LENGTH_LONG).show();
                         }
@@ -202,11 +199,13 @@ public class MainActivity extends Activity
         @Override
         public void run()
         {
+
             try
             {
                 socket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
                 socket.connect();
                 android.util.Log.e("TrackingFlow", "Connected...");
+                CONNECTION_ENSTABLISHED = true;
 
                 os = socket.getOutputStream();
                 is = socket.getInputStream();
@@ -220,7 +219,7 @@ public class MainActivity extends Activity
                 {
                     final StringBuilder sb = new StringBuilder();
                     bytesRead = is.read(buffer);
-                    if (bytesRead != -1) //magic with bytes transfer
+                    if (bytesRead != -1)
                     {
                         String result = "";
                         while ((bytesRead == bufferSize) && (buffer[bufferSize-1] != 0))
@@ -234,10 +233,10 @@ public class MainActivity extends Activity
 
                     android.util.Log.e("TrackingFlow", "Read: " + sb.toString());
 
-                    runOnUiThread(new Runnable() //Show message on UIThread
-                    {
+
+                    runOnUiThread(new Runnable() {
                         @Override
-                        public void run() {
+                        public void run() { //Show message on UIThread
                             Toast.makeText(MainActivity.this, sb.toString(), Toast.LENGTH_LONG).show();
                         }
                     });
@@ -247,41 +246,55 @@ public class MainActivity extends Activity
         }
     };
 
+
     private Runnable writter = new Runnable() {
 
         @Override
         public void run() {
-            int index = 0;
-            while(CONTINUE_READ_WRITE)
-            {
-                try
-                {
-                  //os.write("Message " + (index++) + "\n");
+            while (CONTINUE_READ_WRITE) {
+                try {
+                    //os.write("Message " + (index++) + "\n");
                     os.flush();
                     Thread.sleep(2000);
-                }
-                catch (Exception e)
+                } catch (Exception e)
                 {
-                    Log.e(TAG, "Channel cleaning failed", e);
-                    //e.printStackTrace();
+                    Toast.makeText(getApplicationContext(), "Not sent",Toast.LENGTH_SHORT).show();
+                    e.printStackTrace();
                 }
             }
         }
     };
 
-    public void sendBtnClick(View v) //sending message to open output stream
-    {
-        String textToSend = et.getText().toString();
-        byte[] b = textToSend.getBytes();
 
-        try
+    public void sendBtnClick(View v) //sends text from text button
+    {
+        if(CONNECTION_ENSTABLISHED == false)
         {
-            os.write(b);
+            Toast.makeText(getApplicationContext(), "Connection between devices is not ready.", Toast.LENGTH_SHORT).show();
+            /*
+            if(cbServer.isChecked()) //mostly fault of role selection
+            {
+                cbServer.setChecked(false);
+            }
+            else
+            {
+                cbServer.setChecked(true);
+            }
+
+            openBT(null);
+            sendBtnClick(null);
+            */
         }
-        catch (IOException e){
-            Toast.makeText(getApplicationContext(), "Not sent",Toast.LENGTH_SHORT).show();
+        else
+        {
+            String textToSend = et.getText().toString() + "X"; //method is cutting last character, so way how to cheat it...
+            byte[] b = textToSend.getBytes();
+            try {
+                os.write(b);
+            } catch (IOException e) {
+            }
+            et.setText("");
         }
-        et.setText(""); //reset input field after sending
     }
 
     public void on(View v) //turning on BT when is off
@@ -348,18 +361,16 @@ public class MainActivity extends Activity
     protected void onDestroy()
     {
         super.onDestroy();
-        if(socket != null)
-        {
+        try {unregisterReceiver(discoveryResult);}catch(Exception e){e.printStackTrace();}
+        if(socket != null){
             try
             {
                 is.close();
                 os.close();
                 socket.close();
+                CONTINUE_READ_WRITE = false;
             }
-            catch(Exception e)
-            {
-                android.util.Log.e("TrackingFlow", "Closing of streams failed when program is exiting.");
-            }
+            catch(Exception e){}
             CONTINUE_READ_WRITE = false;
         }
     }

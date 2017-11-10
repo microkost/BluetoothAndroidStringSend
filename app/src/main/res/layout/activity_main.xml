@@ -48,11 +48,11 @@
         android:id="@+id/cbServer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_above="@+id/listView"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true"
         android:layout_below="@+id/txtMessage"
-        android:layout_marginLeft="32dp"
-        android:layout_marginStart="32dp"
+        android:layout_toLeftOf="@+id/button5"
         android:text="Server"/>
 
     <Button
