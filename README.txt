@@ -1,7 +1,7 @@
 
 Android Demonstration Application for sending Strings over Bluetooth.
 
-It's attemp to make one class solution for sending texts over IEEE 802.15.1 channel. Original idea was to make minimalistic app with methods which are easy to read for other developers. Final and production solution will have to use professional threading via Handler and better exception handling (recomended solution lower).
+It's attemp to make one class solution for sending texts over IEEE 802.15.1 channel. Original idea was to make minimalistic app with methods which are easy to read for other developers. Final and production solution will have to use professional threading via Handler and better exception handling (recomended solution lower). Program solution: goo.gl/KrvsWf
 
 Demo was developed as part of presentation Transfering Data between Devices for TTOW0620 Android Application Development course at JAMK.fi. Presentation about more methods and bluetooth overview is there https://goo.gl/TgTW9x.
 
@@ -14,7 +14,7 @@ How it works (user):
 * then you can type and click send for transfer to other device
 * if you need to reset communication and settings use button close
 
-How it works (developer)
+How it works (developer) goo.gl/KrvsWf
 * gathering BT interface as HW
 * printing paired devices list to Array Adapter
 * onclick event for choosing one as remote device
@@ -32,4 +32,4 @@ https://developer.android.com/samples/BluetoothChat/index.html but complexity to
 
 Known issue 2: stream cuts last character in message. Hacked by adding extra letter. Should be solved more wise.
 
-My solution is open by Creative Common right (CC-BY-SA). Source of inspiration https://goo.gl/kF5k5y. Feel free to contribute with improve or fork of project.
+My solution is open by Creative Common right (CC-BY-SA). Source of inspiration https://goo.gl/kF5k5y. Feel free to contribute with improve or fork of project. Enjoy! goo.gl/KrvsWf
