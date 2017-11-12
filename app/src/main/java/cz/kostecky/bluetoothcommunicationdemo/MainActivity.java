@@ -54,15 +54,6 @@ public class MainActivity extends Activity
     private BluetoothDevice remoteDevice;
     private Set<BluetoothDevice> pairedDevices;
 
-    private BroadcastReceiver discoveryResult = new BroadcastReceiver()
-    {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            unregisterReceiver(this);
-            remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-        }
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState)
     {
@@ -89,7 +80,7 @@ public class MainActivity extends Activity
                     String name = (String) parent.getItemAtPosition(position);
                     selectBTdevice(name); //selected device will be set globally
                     //Toast.makeText(getApplicationContext(), "Selected " + name, Toast.LENGTH_SHORT).show();
-                    //openBT(null);
+                    //do not automatically call OpenBT(null) because makes troubles with server/client selection
                 }
                 else //message is selected
                 {
@@ -110,7 +101,7 @@ public class MainActivity extends Activity
         list(null);
     }
 
-    public void openBT(View v)
+    public void openBT(View v) //opens right thread for server or client
     {
         if(adapter == null)
         {
@@ -118,14 +109,20 @@ public class MainActivity extends Activity
             Log.i(TAG, "Backup way of getting adapter was used!");
         }
 
+        if (!adapter.isEnabled())
+        {
+            Log.i(TAG, "BT device is turned off! Turning on...");
+            on(null); //chat doesnt work when BT is off...
+        }
+
         CONTINUE_READ_WRITE = true; //writer tiebreaker
         socket = null; //resetting if was used previously
-        //is = null; //resetting if was used previously
-        //os = null; //resetting if was used previously
+        is = null; //resetting if was used previously
+        os = null; //resetting if was used previously
 
         if(pairedDevices.isEmpty() || remoteDevice == null)
         {
-            Toast.makeText(this, "Paired device is not selected", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Paired device is not selected, choose one", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -176,50 +173,60 @@ public class MainActivity extends Activity
         }
 
         Toast.makeText(getApplicationContext(), "Communication closed" ,Toast.LENGTH_SHORT).show();
-        //list(null);
+
+        list(null); //shows list for reselection
+        et.setText(getResources().getString(R.string.demo_text));
     }
 
     private Runnable serverListener = new Runnable()
     {
         public void run()
         {
-            BluetoothServerSocket tmpsocket = null;
-
-            /*
                 try //opening of BT connection
                 {
-                    android.util.Log.i("TrackingFlow", "new way used...");
+                    //problematic with older phones... HELP: Change server/client orientation...
+                    //but solves: BluetoothAdapter: getBluetoothService() called with no BluetoothManagerCallback
+
+                    android.util.Log.i("TrackingFlow", "Server socket: new way used...");
                     socket =(BluetoothSocket) remoteDevice.getClass().getMethod("createRfcommSocket", new Class[] {int.class}).invoke(remoteDevice,1);
                     socket.connect();
                     CONNECTION_ENSTABLISHED = true; //protect from failing
-                    listItems.clear(); //remove chat history
 
                 } catch(Exception e) //obsolete way how to open BT
                 {
-                    android.util.Log.e("TrackingFlow", "old way used...");
-                    */
                     try
                     {
-                        tmpsocket = adapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
+                        android.util.Log.e("TrackingFlow", "Server socket: old way used...");
+                        BluetoothServerSocket tmpsocket = adapter.listenUsingRfcommWithServiceRecord(NAME, MY_UUID);
                         socket = tmpsocket.accept();
-                        android.util.Log.i("TrackingFlow", "Listening...");
                         CONNECTION_ENSTABLISHED = true; //protect from failing
-                        listItems.clear(); //remove chat history
+                        android.util.Log.i("TrackingFlow", "Listening...");
                     }
-                    catch (IOException ie)
+                    catch (Exception ie)
                     {
                         Log.e(TAG, "Socket's accept method failed", ie);
                         ie.printStackTrace();
                     }
-                //}
+                }
 
+            /*
             if(CONNECTION_ENSTABLISHED != true)
             {
                 Log.e(TAG, "Server is NOT ready for listening...");
+                //"java.io.IOException: read failed, socket might closed or timeout, read ret: -1" When bluetooth is HW off
                 return;
             }
             else
+            */
                 Log.i(TAG, "Server is ready for listening...");
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() { //Show message on UIThread
+                    listItems.clear(); //remove chat history
+                    listItems.add(0, String.format("  Server opened! Waiting for clients..."));
+                    listAdapter.notifyDataSetChanged();
+                }});
 
             try //reading part
             {
@@ -258,7 +265,7 @@ public class MainActivity extends Activity
                 }
             }
             catch(IOException e){
-                Log.e(TAG, "Error with...", e);
+                Log.e(TAG, "Server not connected...");
                 e.printStackTrace();
             }
         }
@@ -269,36 +276,34 @@ public class MainActivity extends Activity
         @Override
         public void run()
         {
-
             try
             {
                 socket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
-                Log.i(TAG, "Socket ready...");
                 socket.connect();
-                Log.i(TAG, "Connect done...");
                 CONNECTION_ENSTABLISHED = true; //protect from failing
-                listItems.clear(); //remove chat history
 
+                /*
                 if(CONNECTION_ENSTABLISHED != true)
                 {
                     Log.e(TAG, "Client is NOT ready for listening...");
                     return;
                 }
                 else
+                */
                     Log.i(TAG, "Client is connected...");
 
-                try
-                {
-                    os = socket.getOutputStream();
-                    is = socket.getInputStream();
-                    new Thread(writter).start();
-                    Log.i(TAG, "Preparation for reading was done");
-                }
-                catch (Exception e)
-                {
-                    Log.e(TAG, "Failed preparation for reading");
-                    return;
-                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() { //Show message on UIThread
+                        listItems.clear(); //remove chat history
+                        listItems.add(0, String.format("  ready to communicate! Write something..."));
+                        listAdapter.notifyDataSetChanged();
+                    }});
+
+                os = socket.getOutputStream();
+                is = socket.getInputStream();
+                new Thread(writter).start();
+                Log.i(TAG, "Preparation for reading was done");
 
                 int bufferSize = 1024;
                 int bytesRead = -1;
@@ -322,7 +327,6 @@ public class MainActivity extends Activity
 
                     android.util.Log.e("TrackingFlow", "Read: " + sb.toString());
 
-
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() { //Show message on UIThread
@@ -335,7 +339,7 @@ public class MainActivity extends Activity
             }
             catch (IOException e)
             {
-                Toast.makeText(MainActivity.this, "Not connected...", Toast.LENGTH_SHORT).show();
+                Log.e(TAG, "Client not connected...");
                 e.printStackTrace();
             }
         }
@@ -346,7 +350,7 @@ public class MainActivity extends Activity
 
         @Override
         public void run() {
-            while (CONTINUE_READ_WRITE)
+            while (CONTINUE_READ_WRITE) //reads from open stream
             {
                 try
                 {
@@ -355,13 +359,11 @@ public class MainActivity extends Activity
                 } catch (Exception e)
                 {
                     Log.e(TAG, "Writer failed in flushing output stream...");
-                    Toast.makeText(getApplicationContext(), "Not sent",Toast.LENGTH_SHORT).show();
-                    //e.printStackTrace();
+                    CONTINUE_READ_WRITE = false;
                 }
             }
         }
     };
-
 
     public void sendBtnClick(View v) //sends text from text button
     {
@@ -409,29 +411,23 @@ public class MainActivity extends Activity
 
     public void visible(View v) //BT device discoverable
     {
-        //private static final int DISCOVERABLE_REQUEST_CODE = 0x1;
         Intent getVisible = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
         startActivityForResult(getVisible, 0);
     }
 
-    public void list(View v)
+    public void list(View v) //shows paired devices to UI
     {
         CONNECTION_ENSTABLISHED = false; //protect from failing
         listItems.clear(); //remove chat history
+        listAdapter.notifyDataSetChanged();
 
         pairedDevices = adapter.getBondedDevices(); //list of devices
-        //ArrayList list = new ArrayList(); //for UI
 
         for(BluetoothDevice bt : pairedDevices) //foreach
         {
-            //list.add(bt.getName());
             listItems.add(0, bt.getName());
         }
         listAdapter.notifyDataSetChanged(); //reload UI
-
-        //final ArrayAdapter adapter = new ArrayAdapter(this,android.R.layout.simple_list_item_1, list);
-        //listAdapter = new ArrayAdapter(this,android.R.layout.simple_list_item_1, list);
-        //lv.setAdapter(listAdapter);
     }
 
     public void selectBTdevice(String name) //for selecting device from list which is used in procedures
@@ -452,21 +448,10 @@ public class MainActivity extends Activity
     }
 
     @Override
-    protected void onDestroy()
+    protected void onDestroy() //magic for GC, works automaticaly
     {
         super.onDestroy();
-        try {unregisterReceiver(discoveryResult);}catch(Exception e){e.printStackTrace();}
-        if(socket != null){
-            try
-            {
-                is.close();
-                os.close();
-                socket.close();
-                CONTINUE_READ_WRITE = false;
-            }
-            catch(Exception e){}
-            CONTINUE_READ_WRITE = false;
-        }
+        closeBT(null);
     }
 }
 

@@ -96,7 +96,7 @@
         android:layout_below="@+id/button1"
         android:ems="10"
         android:inputType="textMultiLine"
-        android:text="Write a message here..."/>
+        android:text="@string/demo_text"/>
 
     <ListView
         android:id="@+id/listView"

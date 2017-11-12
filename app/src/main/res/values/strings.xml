@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Bluetooth Chat</string>
+    <string name="demo_text">Write a message here...</string>
 </resources>
