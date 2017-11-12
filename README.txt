@@ -1,3 +1,4 @@
+
 Android Demonstration Application for sending Strings over Bluetooth.
 
 It's attemp to make one class solution for sending texts over IEEE 802.15.1 channel. Original idea was to make minimalistic app with methods which are easy to read for other developers. Final and production solution will have to use professional threading via Handler and better exception handling (recomended solution lower).
