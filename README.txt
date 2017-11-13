@@ -5,7 +5,7 @@ It's attemp to make one class solution for sending texts over IEEE 802.15.1 chan
 
 Demo was developed as part of presentation Transfering Data between Devices for TTOW0620 Android Application Development course at JAMK.fi. Presentation about more methods and bluetooth overview is there https://goo.gl/TgTW9x.
 
-How it works (user):
+How it works (user): https://youtu.be/leQW0rgdocY
 * activate bluetooth interface (method on)
 * (pair devices throught system - no app support)
 * select remote device from list
